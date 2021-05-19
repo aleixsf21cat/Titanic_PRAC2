@@ -1,0 +1,456 @@
+---
+title: 'Tipologia i cicle de vida de les dades'
+author: "Autor: Lluís Calvo i Aleix Sicília"
+date: "13-05-2021"
+output:
+  word_document: default
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+******
+# Introducció
+
+Aquesta pràctica consisteix en la PAC2 de l'assignatura de Tipologia i cicle de vida de les dades en el Màster de ciència de dades de la Universitat Oberta de Catalunya
+
+******
+# Pràctica 2 - Cas Titanic
+
+## Descripció del dataset
+
+(1) (2) Aquest conjunt de dades forma part de la competició de Kaggle del Titanic. El 15 d’abril de 1912 va haver l’enfonsament del creuer Titànic. Desafortunadament, van morir 1502 de 2224 del total de tripulants (comptant passatgers i oficials). Encara que hi hagués un component de sort aleatòria de sobreviure al desastre, és àmpliament difós que alguns grups de persones tenien més probabilitats  que d’altres.
+Aquest dataset s'extreu del portal de competició de projectes d'estadística Kaggle i tracta d'una mostra reduïda d'informació dels passatgers d'aquest tràgic viatge. En aquest projecte s’intentarà observar quins són els tipus de persones van tenir més probabilitats de supervivència? Al respondre aquesta pregunta podrem interpretar com va ser el succés i es poden extreure conclusions per tal d’evitar accidents de cara al futur. 
+
+
+## Integració i selecció de les dades d’interès a analitzar.
+
+Primerament instal·lem i carreguem les llibreries necessàries:
+* ggplot2
+* dplyr
+* mlbench
+* MASS
+* pROC
+* randomForest
+* tidyverse
+* lsr
+
+Primerament, instal·lem i carreguem les llibreries ggplot2 i dplry
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Llibreries utilitzades
+packages <- c('ggplot2', 'dplyr', 'mlbench', 'MASS', 'pROC', 'randomForest', 'tidyverse', 'lsr', 'psych', 'ggthemes', 'tinytex')
+
+# Instal·lació packets encara no instal·lats.
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+library('ggplot2')
+library('dplyr')
+library('mlbench')
+library('MASS')
+library('pROC')
+library('randomForest')
+library('tidyverse')
+library('lsr')
+library('psych')
+library('ggthemes') 
+library('tinytex') 
+
+```
+
+Carreguem el fitxer de dades de train i test. Ens assegurarem de tenir mostres úniques.
+
+```{r}
+train <- unique(read.csv('data/train.csv',stringsAsFactors = FALSE))
+test <- unique(read.csv('data/test.csv',stringsAsFactors = FALSE))
+filas=dim(train)[1]
+filas=dim(test)[1]
+```
+
+Verifiquem l'estructura del joc de dades principal de train
+
+```{r}
+str(train)
+names(train)
+```
+
+Verifiquem l'estructura del joc de dades principal de test
+
+```{r}
+str(test)
+```
+
+Veiem que tenim 891 registres de train que es corresponen als viatgers i tripulació del Titànic i 11 variables que els caracteritzen. En el model de test observem 418 observacions, tot i que no hi ha informació sobre si ha sobreviscut i és el que hem de predir. La resta de variables són iguals. No es poden integrar al ser conjunts de dades diferents (falta la columna "Survived"), per tant no es pot aplicar un merge ja que els conjunts de test ens falta informació.
+
+Revisem la descripció de les variables contingudes al fitxer i si els tipus de variable es correspon al que hem carregat:
+
+**PassangerId (1)**
+    int amb el codi del passatger. No farà falta tenir-los en compte ja que no ens dona informació descriptiva sinó que es tractarà del codi de cada mostra
+    
+**Survived (2)**
+    int, es tracta de si ha sobreviscut un tripulant o viatger o no. Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+    
+**Pblcass (3)**
+    int, indica la classe del passatger. Hi ha tres classes (1-3, sent 1 primera classe). Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+    
+**Name (4)**
+    string, indica el nom de cada passatger o tripulant. No és informació a tenir en compte de cara a l'anàlisis.
+    
+**Sex (5)**
+    chr, indica el sexe de la persona (male/female). Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+    
+**Age (6)**
+    num Indica l'edat de cada persona. Hi ha edats amb decimals per tant no pot ser enter. Es discretitzarà per grups d'edat de múltiples de 10 anys per tal d'extreure informació més interpretable.
+    
+**SibSp (7)**
+    int, indica si té germanes o esposes a bord.Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+    
+**Parch (8)**
+    int, indica si té pares o germanes a bord.Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+    
+**Ticket (9)**
+    chr, indica el codi de ticket que tenia cada passatger. No és informació rellevant per aquest cas.
+    
+**Fare (10)**
+    num, indica el valor del ticket en dólars.
+    
+**Cabin (11)**
+    chr, indica el número de cabina amb el que es va viatjar. No és informació rellevant per aquest cas.
+    
+**Embarked (12)**
+    int, indica el port d'embarque (c=Cherbourg, Q=Queenstown, S=Southampton). Al tractar-se d'una variable categòrica l'haurem de convertir a variable categòrica (factor).
+
+Per tal de corregir el dataset caldrà negligir certs atributs no necessaris com ara "cabin", "passangerId","Name", "Ticket", ja que donen informació massa general o no és informació rellevant.
+
+```{r}
+df_titanic <- train[ -c(1,4,9,11) ]
+```
+
+Una vegada corregit, haurem de discretitzar certs camps. Per exemple, d'una manera senzilla haurem de categoritzar les columnes de "Survived", "Pblcass", "Sex", "SibSp", "Parch", "Embarked". També es podria discritzar "Age" per segments d'edat en múltiples de 10, però no es farà per tal de poder corregir els possibles valors buits a posteriori.
+
+Abans de categoritzar, però tractarem els valors
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(df_titanic)
+df_titanic$Embarked[is.na(df_titanic$Embarked)] <- "A"
+summary(df_titanic)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df_titanic$Embarked[df_titanic$Embarked == ""] <- "Desconegut" 
+df_titanic$Embarked[is.na(df_titanic$Embarked)] <- "Desconegut"
+str(df_titanic)
+summary(df_titanic)
+```
+
+
+Després passem a discretitzar Age per diferents segments d'edat.
+
+```{r}
+cols <- c("Survived", "Pclass", "Sex", "SibSp", "Parch", "Embarked")
+df_titanic[cols] <- lapply(df_titanic[cols], factor)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(df_titanic)
+```
+
+Observem les dades discretitzades
+
+```{r}
+head(df_titanic)
+```
+
+També es veurà un scatterplot per tal de veure si hi ha variables correlacionades. En vermell s'explicita si una persona ha sobreviscut o no (en vermell han sobreviscut). 
+
+```{r}
+# Basic Scatterplot Matrix
+ pairs(~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, col = factor(df_titanic$Survived), pch = 19, data = df_titanic)
+```
+
+
+
+##	Neteja de les dades.
+###	Les dades contenen zeros o elements buits? Com gestionaries aquests casos?
+
+En primer lloc, hem de veure les estadístiques de valors buits tant desconegudes com sense valor.
+
+```{r}
+# Estadístiques valors NA
+colSums(is.na(df_titanic))
+# Estadístiques valors buits
+colSums(df_titanic=="")
+```
+
+Al només haver dos observacions on no es té informació del port d'embarcament. Caldrà a tenir en compte que es conservaran els valors originals ja que realment no es sabrà de quin port van sortir per falta d'informació.
+Per altra banda, s'assigna la mitjana per a valors buits de la variable "age"
+
+```{r}
+df_titanic$Age[is.na(df_titanic$Age)] <- mean(df_titanic$Age,na.rm=T)
+```
+
+Es pot observar com hi ha 177 observacions sense valors en el camp d'edat. És probable que molts viatgers no volguessin explicitar la seva edat. Es corregirà aquest camp mitjançant la mitjana de l'edat. També s'ha observat que hi ha dos observacions sense port d'origen.
+
+
+
+###	Identificació i tractament de valors extrems.
+
+A continuació, es detallarà un tractament d'outliers. Primerament veurem un boxplot de la variable "Fare" i "Age"
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+titanic.bp<-boxplot(df_titanic$Fare,main="Boxplot de Pagament del ticket")
+titanic.bp<-boxplot(df_titanic$Age,main="Boxplot d'edat")
+```
+
+
+En el cas de la de l'edat podem discretitzar en rangs múltiples de 10
+
+```{r}
+df_titanic["segment_edat"] <- cut(df_titanic$Age, breaks = c(0,10,20,30,40,50,60,70,100), labels = c("0-9", "10-19", "20-29", "30-39","40-49","50-59","60-69",">70"))
+```
+
+Veiem com s'agrupaven per segments d'edat i observem un predomini del grup d'edat entre 20 i 29 anys.
+
+```{r}
+plot(df_titanic$segment_edat)
+```
+
+
+De la discretizació de l'edat observem que realment la gent que viatjava era molt jove. El segment més gran erà de 20 a 29 anys. També veiem de la joventut de la tripulació.
+A continuació, caldrà tractar els valors extrems que van pagar unes taxes molt elevades. Ho analitzarem veient aquells valors que tenen una desviació estàndard superior a 3
+
+```{r}
+# Criteri de 3 Desviacions estàndards (+/-3 SD)
+Fare.outlier <- abs(scale(df_titanic$Fare)) > 3
+colSums(Fare.outlier=="TRUE")
+```
+
+En aquest cas hi ha 20 valors outliers. De moment, es conservaran en el model ja que estadísticament poden entrar (es tracta d'un 2,2% del total de les dades de train).
+
+## Anàlisis de les dades
+
+### Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar).
+
+En primer lloc hem de veure un anàlisis descriptiu del conjunt de dades ja tractat.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(df_titanic)
+```
+
+A continuació, s'observa un anàlisis de l'estructura composta de les dades.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+str(df_titanic)
+```
+
+Podem observar com hi ha diferents variables ja tractades. Per exemple, es detalla que Survived i Sex tenen dos factors. En canvi, Pbclass en té 3, per 4 d'Embarked (si es té en compte les dos observacions amb port desconegut). També cal tenir en compte les 7 categories de SibSp i Parch i la nova variable de segment d'edat amb 8.
+Cal tenir en compte que la variable Age no tindrà sentit si usem segment d'edat per tal de tractar els valors outliers. Per la qual cosa aquesta variable pot ser negligible.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Eliminarem la variable edat
+df_titanic <- df_titanic[ -c(4) ]
+```
+
+### Comprovació de la normalitat i homogeneïtat de la variància
+
+En primer lloc, hem de veure la normalitat del model. Això ho podem fer mitjançant Kolmogorov-Smirnov en la variable "Fare".
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ks.test(df_titanic$Fare, pnorm, mean(df_titanic$Fare), sd(df_titanic$Fare))
+shapiro.test(df_titanic$Fare)
+```
+
+Tant pel test de Kolmogorov-Smirnov com per Shapiro no es compleix la normalitat en Fare. 
+
+* MOD    levene test es per distribucions normals, per distribucions no normals utilitzem Fligner-Killeen
+
+A continuació, es veurà la variància dels errors a partir d'un anàlisis de l’homoscedasticitat. Com en el punt anterior hem observat que les dades no segueixen una distribució normal, utilitzarem el test Fligner-Killeen
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Aquí es pot observar diferents mètodes per tal d'observar l'homoscdasticitat. Tant es pot calcular el test de Levene com el de Barlett.
+# levene.test(Fare ~ Survived, data = df_titanic)
+# leveneTest(Fare ~ Survived, data = df_titanic)
+res <- bartlett.test(Fare ~ Survived, data = df_titanic)
+res
+```
+
+Com p-value és inferior a 0,05 es rebutja la hipòtesis d'homogeneïtat en la variància segons el test de Barlett.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+fligner.test(Fare ~ Survived, data = df_titanic)
+```
+
+La prova de Fligner-Killeen dona un p-valor inferior al nivell de significació (<0,005), per tant la variable "Fare" presenta variables estadísticament diferents per als diferents grups de "Survived".
+
+
+### Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l’objectiu de l’estudi, aplicar proves de contrast d’hipòtesis, correlacions, regressions, etc. Aplicar almenys tres mètodes d’anàlisi diferents.
+
+#### Comparació entre dos grups de dades
+
+A l'apartat anterior hem conclós que la normalitat i l'homoscedasticitat no es compleixen, per tant, harem d'aplicar proves no paràmetriques de contrast d'hipotèsis, com Wilcoxon i Mann-Whitney. Compararem la relació entre "Fare" i "Survived" per els grups d'edat "20-29" i "50-59".
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+wilcox.test(Fare ~ Survived, data = df_titanic, subset = segment_edat %in% c("20-29", "50-59"))
+```
+
+No s'observen diferències estadísticament significatives en la supervivència entre els segments d'edat "20-29" i "50-59".
+
+#### Comparació entre més de dos grups de dades
+
+Utilitzarem el test de Kruskal-Wallis com a test no paramètric.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+kruskal.test(Fare ~ Survived, data = df_titanic)
+```
+
+Com que el p-valor obtingut és inferior que el nivell de significació, podem concloure que la supervivència mostra diferències significatives segons el preu pagat per el bitllet.
+
+#### Regressió
+
+Representació del conjunt de dades per parelles de variables.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+plot(df_titanic)
+```
+
+Anem a analitzar la relació entre el preu pagat pel bitllet i la supervivència, després de veure certa relació entre aquest atributs.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+logit_1 <- glm(Survived~df_titanic$Fare, family = binomial,data = df_titanic)
+summary(logit_1)
+```
+
+Podem observar que es tracta d'una regressió lineal binària, ja que la variable de decisió és binària (sobreviu o no). Per tant, podem observar com el valor de Z>3 es tracta d'una variable a tenir en compte. No obstant, només estem definint el model amb una variable, pel qual hem d'incloure, més variables.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+logit_1 <- glm(Survived~df_titanic$Fare+df_titanic$Sex+df_titanic$Sex, family = binomial,data = df_titanic)
+summary(logit_1)
+anova(logit_1)
+```
+
+A continuació, podem observar com la variable de sexe masculí provocava una disminució de la probabilitat de supervivència. Per tant, és una de les variables que més influeix en la supervivència del titànic. 
+
+En el següent, cas aplicarem una minimització del valor AIC per tal de veure les variables que descriuen millor el model.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Regressió binomial
+logit_1 <- glm(Survived~., family = binomial,data = df_titanic)
+summary(logit_1)
+logit_2 <- stepAIC(logit_1)
+```
+
+En aquest anàlisis es pot observar com les variables més rellevants és el sexe (Z<-13,15). Això ens indica que es van complir els procediments típics del codi mariner, on en aquella època tenien prioritat el sexe femení en cas d'abordatge. També tenies menys probabilitats de sobreviure si eres de tercera classe o segona. Altres variables rellevants són els diferents grups d'edat. Els menors de 20 anys i majors de 70 van tenir més possibilitats de supervivència.
+
+#### Analisi de correlació
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(df_titanic)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Correlacions entre variables
+pairs.panels(df_titanic)
+
+```
+
+En l'anterior scatterplot, com la probabilitat de sobreviure està molt influenciada perquè sigui un sexe femení. També una de les variables més correlacionades amb la supervivència és la classe. Si és de classe 1 és més probable de sobreviure a una de classe 3. També estan molt relacionades les classes amb lex taxes (55%). També hi ha una certa relació entre el segment d'edat i la classe d'embarcament
+
+#### Aplicació de model predictiu (Random Forest)
+
+Aplicarem un model d'arbres de decisió (Random Forest), que per les condicions del conjunt de dades sembla més adient. No obstant, caldria comparar els diferents errors entre models i també observar si es pot usar models predictius en paral·lel amb diferents classificadors.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Obtindrem la llibreria corresponent
+library('randomForest') 
+train <- df_titanic[1:712,]
+test <- df_titanic[713:891,]
+# Set a random seed
+set.seed(754)
+
+
+# Construim un model de RandomForest amb les variables ja tractades (Sexe,classe d'embarcament, port d'embarcament, sexe, situació familiar, preu del ticket i segment d'edat)
+
+titanic_model <- randomForest(Survived ~.,
+                              data = train)
+```
+
+A continuació, representarem els resultats del model predictiu Random Forest. Es detallaran els errors per número d'estimadors (arbres de decisió en aquest cas), un ranking d'importàncies relatives i les respectives prediccions.
+
+## Representació dels resultats a partir de taules i gràfiques
+
+En primer lloc, observarem la precisió del model resultant per Random Forest.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Mostrem l'error del model
+
+plot(titanic_model, ylim=c(0,0.36))
+legend('topright', colnames(titanic_model$err.rate), col=1:3, fill=1:3)
+```
+
+En l'anterior punt vam veure com el model ens dona una precisió aproximada del 80%. Tindríem una precisió al voltant del 90% pels no supervivents i d'un 70% pels supervivents, en training set. Un cop aplicat el Random Forest veurem la importància de cada variable en el model per tal d'interpretar el model.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Treiem les variables amb més importància relativa
+
+importance    <- importance(titanic_model)
+varImportance <- data.frame(Variables = row.names(importance), 
+                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
+# Creem un ranking basat en importància relativa
+
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+# Usem ggplot2 per visualitzar la importància relativa
+
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+                           y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+            hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+```
+
+Tal i com hem vist anteriorment, podem veure les variables que més importen en la decisió de l'algoritme de RandomForest. Podem observar com les variables més rellevants són Sexe, seguit de les taxes (Fare), el segment de l'edat i la classe. Com les taxes pagades estan correlacionades amb les classes té sentit.
+A continuació, es detallarà les prediccions del nostre model 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# Predim usant testing set
+
+prediction <- predict(titanic_model, test)
+prediction
+
+write.csv(prediction, file = 'sicilia_calvo_titanic_predictions.csv', row.names = F)
+write.csv(df_titanic, file = 'sicilia_calvo_titanic_df_titanic.csv')
+```
+
+
+
+## Resolució del problema. A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
+
+
+Les variables més rellevants a l'hora de determinar la supervivència d'un passatger són el sexe seguit de variables relacionades amb el seu nivell adquisitiu (preu del ticket o classe) i la seva edat. També és cert que hi ha una certa relació entre el preu del ticket, la classe d'embarcament i el segment d'edat.
+
+Les dades tenen una qualitat correcta i estan majoritàriament ben informades. Disposen d'una variable de classe "survived" que les fa aptes per un classificador. 
+
+En resum, aconseguim obtenir una predicció de cada classe segons el tipo d'observació amb un model de Random Forest amb una precisió al voltant d'un 80%.
+
+## Codi
+
+El codi s'ha anat adjuntant en la resolució de cada apartat. Per tant,  ja no faria falta aquest apartat.
+
+
