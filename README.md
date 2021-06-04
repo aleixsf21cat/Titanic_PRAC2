@@ -1,4 +1,6 @@
-# Titanic_PRAC2
-Aquesta pràctica consisteix en la PAC2 de l’assignatura de Tipologia i cicle de vida de les dades en el Màster de ciència de dades de la Universitat Oberta de Catalunya. El conjunt de dades forma part de la competició de Kaggle del Titanic. El 15 d’abril de 1912 va haver l’enfonsament del creuer Titànic. Desafortunadament, van morir 1502 de 2224 del total de tripulants (comptant passatgers i oficials). Encara que hi hagués un component de sort aleatòria de sobreviure al desastre, és àmpliament difós que alguns grups de persones tenien més probabilitats que d’altres. 
+# TCVD_Practica2_Titanic
+Tipologia i Cicle de Vida de les Dades - Practica 2 - Titanic
 
-Aquest dataset s’extreu del portal de competició de projectes d’estadística Kaggle i tracta d’una mostra reduïda d’informació dels passatgers d’aquest tràgic viatge. En aquest projecte s’intentarà observar quins són els tipus de persones van tenir més probabilitats de supervivència? Al respondre aquesta pregunta podrem interpretar com va ser el succés i es poden extreure conclusions per tal d’evitar accidents de cara al futur.
+Practica 2 de l'assignatura de Tipologia i cicle de diva de les dades del Màster de Ciència de Dades de la UOC.
+
+La practica es base en el conjunt de dades Titanic del lloc web de Kaggle. Aquest conjunt de dades correspon als passatges i triuplants del creuer Titanic, que es va esponçar en l'Atlantic. L'estudi preten trobar dins dels atributs del conjunt de dades, aquells que van influir en la supervivència o no dels passatges i tripulants del creuer, com per exemple: Sexe, Edat, Lloc d'embarcament, preu del passatge, parents, etc.
