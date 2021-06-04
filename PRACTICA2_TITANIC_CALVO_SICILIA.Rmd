@@ -4,15 +4,17 @@ author: "Autor: Lluís Calvo i Aleix Sicília"
 date: "13-05-2021"
 output:
   word_document: default
-  html_document:
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  html_document: 
     highlight: default
     number_sections: yes
     theme: cosmo
     toc: yes
-    toc_depth: 2
-  pdf_document:
-    highlight: zenburn
-    toc: yes
+    toc_depth: 4
+    includes:
+      in_header: PRA2-header.html
 ---
 
 ******
@@ -45,14 +47,12 @@ Primerament, instal·lem i carreguem les llibreries ggplot2 i dplry
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Llibreries utilitzades
-packages <- c('ggplot2', 'dplyr', 'mlbench', 'MASS', 'pROC', 'randomForest', 'tidyverse', 'lsr', 'psych', 'ggthemes', 'tinytex')
-
+packages <- c('ggplot2', 'dplyr', 'mlbench', 'MASS', 'pROC', 'randomForest', 'tidyverse', 'lsr', 'psych', 'ggthemes', 'tinytex', 'qqPlot')
 # Instal·lació packets encara no instal·lats.
 installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages])
+  install.packages(packages[!installed_packages], repos = "http://cran.us.r-project.org")
 }
-
 library('ggplot2')
 library('dplyr')
 library('mlbench')
@@ -209,7 +209,6 @@ Es pot observar com hi ha 177 observacions sense valors en el camp d'edat. És p
 A continuació, es detallarà un tractament d'outliers. Primerament veurem un boxplot de la variable "Fare" i "Age"
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-
 titanic.bp<-boxplot(df_titanic$Fare,main="Boxplot de Pagament del ticket")
 titanic.bp<-boxplot(df_titanic$Age,main="Boxplot d'edat")
 ```
@@ -263,25 +262,74 @@ Cal tenir en compte que la variable Age no tindrà sentit si usem segment d'edat
 df_titanic <- df_titanic[ -c(4) ]
 ```
 
+Realitzarem un analisi exploratori de les dades mitjançant histogrames de freqüència dels següents atributs
+
+* Pclass: Classe en que viatja el passatger
+* Sex: Sexe del passatger
+* segment_Edat: Segment d'edat del passatger
+* SibSp: Geramnes/Esposses del passatger
+* Parch: Pares/Fills del passatger
+* Fare: Import bitllet
+* Embarked: Port d'embarcament
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+require(gridExtra)
+
+p1 <- ggplot(df_titanic, aes(x=factor(Pclass), fill = Survived)) + geom_bar(position = "fill") + xlab("Classe Passatger") + ylab("Proporció")
+
+p2 <- ggplot(df_titanic, aes(x=factor(Sex), fill = Survived)) + geom_bar(position = "fill") + xlab("Sexe Passatger") + ylab("Proporció")
+
+p3 <- ggplot(df_titanic, aes(x=factor(segment_edat), fill = Survived)) + geom_bar(position = "fill") + xlab("Edat Passatger") + ylab("Proporció")
+
+p4 <- ggplot(df_titanic, aes(x=factor(SibSp), fill = Survived)) + geom_bar(position = "fill") + xlab("Germanes/Esposes Passatger") + ylab("Proporció")
+
+p5 <- ggplot(df_titanic, aes(x=factor(Parch), fill = Survived)) + geom_bar(position = "fill") + xlab("Pares/Fills Passatger") + ylab("Proporció")
+
+p6 <- ggplot(df_titanic, aes(x=Fare, fill = Survived)) + geom_histogram(bins=10, position = "fill") + xlab("Import bitllet") + ylab("Proporció")
+
+p7 <- ggplot(df_titanic, aes(x=factor(Embarked), fill = Survived)) + geom_bar(position = "fill") + xlab("Port Embarcament") + ylab("Proporció")
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, nrow = 4)
+```
+
+D'un analisi visual, es pot apreciar que per certs atributs, la proporció de supervivent/no supervivents es molt diferent:
+
+* Classe: Es pot apreciar que hi ha haver més supervivents dins de les classes més elevades.
+* Sexe: Es pot apreciar que entre les dones la supervivència va ser al volant del 75% i en canvi entre els homes va ser al voltant del 25%
+* Import bitllet: Sembla que com més car era el bitllet, més possibilitats hi havia de sobrevieure. Deduïm (Encara que caldria contrastar-ho) que els que no han pagat billet, son els membres de la tripulació, i en aquest sector es pot veure que la supervivència es molt inferiror a la resta.
+* Port embarcament: Sembla que que les persones que no es coneix el port d'embarcament, tenien moltes ménys possibilitats de sobreviure, potser aquestes persones son part de la tripulació. S'hauria d'estudiar en un analisi més detallat.
+
+
 ### Comprovació de la normalitat i homogeneïtat de la variància
 
-En primer lloc, hem de veure la normalitat del model. Això ho podem fer mitjançant Kolmogorov-Smirnov en la variable "Fare".
+#### Comprovació de la normalitat
+
+En primer lloc, hem de veure la normalitat del model. Això ho podem fer mitjançant dos tests, el de Kolmogorov-Smirnov i el de Shapiro-Wilk sobre la variable "Fare".
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 ks.test(df_titanic$Fare, pnorm, mean(df_titanic$Fare), sd(df_titanic$Fare))
 shapiro.test(df_titanic$Fare)
 ```
+En ambdues proves, el p-valor es més petit que el nivell de significació, que gereralment es pren com a alpha = 0,05. En ambdos casos el valor es molt més petit, per tant, assumirem que la mostra no es una distribució normal.
 
-Tant pel test de Kolmogorov-Smirnov com per Shapiro no es compleix la normalitat en Fare. 
 
-* MOD    levene test es per distribucions normals, per distribucions no normals utilitzem Fligner-Killeen
-
-A continuació, es veurà la variància dels errors a partir d'un anàlisis de l’homoscedasticitat. Com en el punt anterior hem observat que les dades no segueixen una distribució normal, utilitzarem el test Fligner-Killeen
+Realitarem un qqplot (Quantile-Quantile plot) per veure la correlació entre la nostra distribució i una distribució normal, per confirmar visualment el resultat anteriroment, és a dir, que la distribució no és normal.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-# Aquí es pot observar diferents mètodes per tal d'observar l'homoscdasticitat. Tant es pot calcular el test de Levene com el de Barlett.
-# levene.test(Fare ~ Survived, data = df_titanic)
-# leveneTest(Fare ~ Survived, data = df_titanic)
+
+qqnorm(df_titanic$Fare, pch = 1, frame = FALSE)
+qqline(df_titanic$Fare, col = "steelblue", lwd = 2)
+
+```
+
+Es pot apreciar clarament la diferència de la distribució entre la nostra mostra i la d'una mostra normal, per tant tal i com s'havia observat no hi ha normalitat.
+
+
+#### Comprovació de la homogeneïtat de la variància
+
+A continuació, es veurà la variància dels errors a partir d'un anàlisis de l’homoscedasticitat. Com en el punt anterior hem observat que les dades no segueixen una distribució normal, utilitzarem el test Fligner-Killeen, ja que el tests de Levene únicament per mostres amb una distribució noraml
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 res <- bartlett.test(Fare ~ Survived, data = df_titanic)
 res
 ```
@@ -362,7 +410,6 @@ summary(df_titanic)
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Correlacions entre variables
 pairs.panels(df_titanic)
-
 ```
 
 En l'anterior scatterplot, com la probabilitat de sobreviure està molt influenciada perquè sigui un sexe femení. També una de les variables més correlacionades amb la supervivència és la classe. Si és de classe 1 és més probable de sobreviure a una de classe 3. També estan molt relacionades les classes amb lex taxes (55%). També hi ha una certa relació entre el segment d'edat i la classe d'embarcament
@@ -378,10 +425,7 @@ train <- df_titanic[1:712,]
 test <- df_titanic[713:891,]
 # Set a random seed
 set.seed(754)
-
-
 # Construim un model de RandomForest amb les variables ja tractades (Sexe,classe d'embarcament, port d'embarcament, sexe, situació familiar, preu del ticket i segment d'edat)
-
 titanic_model <- randomForest(Survived ~.,
                               data = train)
 ```
@@ -390,30 +434,26 @@ A continuació, representarem els resultats del model predictiu Random Forest. E
 
 ## Representació dels resultats a partir de taules i gràfiques
 
-En primer lloc, observarem la precisió del model resultant per Random Forest.
+En primer lloc, observarem la precisió del model resultant per Random Forest. Tot i que aquest model és de més difícil interpretació gràfica que altres mètodes com ara una regressió lineal, s'intentarà extreure tota la informació possible.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Mostrem l'error del model
-
 plot(titanic_model, ylim=c(0,0.36))
 legend('topright', colnames(titanic_model$err.rate), col=1:3, fill=1:3)
 ```
 
-En l'anterior punt vam veure com el model ens dona una precisió aproximada del 80%. Tindríem una precisió al voltant del 90% pels no supervivents i d'un 70% pels supervivents, en training set. Un cop aplicat el Random Forest veurem la importància de cada variable en el model per tal d'interpretar el model.
+En l'anterior punt vam veure com el model ens dona una precisió aproximada del 80%. Tindríem una precisió al voltant del 90% pels no supervivents i d'un 70% pels supervivents, en training set. Un cop aplicat el Random Forest veurem la importància de cada variable en el model per tal d'interpretar el model. 
+Al ser un model més complicat que altres mètodes de graficar degut a la seva estructura de "black box" hem optat per representar aquella estrucutra de múltiples arbres com la importància relativa, que mostra les variables de decisió més importants que pren el random Forest
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Treiem les variables amb més importància relativa
-
 importance    <- importance(titanic_model)
 varImportance <- data.frame(Variables = row.names(importance), 
                             Importance = round(importance[ ,'MeanDecreaseGini'],2))
 # Creem un ranking basat en importància relativa
-
 rankImportance <- varImportance %>%
   mutate(Rank = paste0('#',dense_rank(desc(Importance))))
-
 # Usem ggplot2 per visualitzar la importància relativa
-
 ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
                            y = Importance, fill = Importance)) +
   geom_bar(stat='identity') + 
@@ -428,17 +468,25 @@ Tal i com hem vist anteriorment, podem veure les variables que més importen en 
 A continuació, es detallarà les prediccions del nostre model 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-
 # Predim usant testing set
-
 prediction <- predict(titanic_model, test)
 prediction
-
-write.csv(prediction, file = 'sicilia_calvo_titanic_predictions.csv', row.names = F)
-write.csv(df_titanic, file = 'sicilia_calvo_titanic_df_titanic.csv')
+write.csv(prediction, file = 'Output/sicilia_calvo_titanic_predictions.csv', row.names = F)
+write.csv(df_titanic, file = 'Output/sicilia_calvo_titanic_df_titanic.csv')
 ```
 
+### Representació del model de regressió binomial
 
+En aquest apartat es podrà observar com es comporta la regressió lineal del nostre model.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+logit_1 <- glm(Survived~df_titanic$Fare+df_titanic$Sex, family = binomial,data = df_titanic)
+plot(Survived~df_titanic$Fare+df_titanic$Sex, data=df_titanic,type="l",lty=1,col=16,ylim=c(0,1),xlim=c(0,7))
+
+abline(logit_1, col=2) 
+```
+
+En aquest gràfic es pot representar la regressió binomial com la probabilitat de que una persona sobrevisqui. Es pot apreciar com segons la taxa de pagamaent entre 0 i 50 la probabilitat era molt més alta que en les altres taxes. Una altra probabilitat de sobreviure era ser dona, en comparació a ser home. Tal i com es pot observar el logit_1 només tenint en compte sex i Fare no pot fer una bona delimitació del model ja que està subajustat al model de dades i no extreu un model correcte.
 
 ## Resolució del problema. A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
 
@@ -452,5 +500,3 @@ En resum, aconseguim obtenir una predicció de cada classe segons el tipo d'obse
 ## Codi
 
 El codi s'ha anat adjuntant en la resolució de cada apartat. Per tant,  ja no faria falta aquest apartat.
-
-
